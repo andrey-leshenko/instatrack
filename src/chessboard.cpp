@@ -87,9 +87,9 @@ static bool areClockwiseOnImage(Vec2d a, Vec2d b, Vec2d c, Vec2d d)
 	return clockwiseWhenYIsDown;
 }
 
-bool findChessboardSquares(InputArray src, Size gridSize, vector<Point2f> &foundPoints)
+bool findChessboardSquares(InputArray src, Size gridSize, vector<Point2f> &foundPoints, int flags)
 {
-	const bool newThreshold = false;
+	const bool newThreshold = flags & CV_CALIB_CB_ADAPTIVE_THRESH;
 	const bool newTernerization = true;
 
 	int gridSizeMin = std::min(gridSize.width, gridSize.height);

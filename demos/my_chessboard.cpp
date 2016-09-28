@@ -2,7 +2,7 @@
 #include "../src/util.hpp"
 #include "../src/chessboard.hpp"
 
-const Size chessboardSize{7, 4};
+const Size chessboardSize{5, 4};
 
 int main()
 {
@@ -20,6 +20,7 @@ int main()
 
 	int pressedKey = 0;
 	bool searching = true;
+	bool adaptiveThreshold = false;
 
 	cam.grab();
 
@@ -28,12 +29,16 @@ int main()
 		cam.grab();
 
 		if (searching) {
+			int flags = 0;
+			if (adaptiveThreshold) {
+				flags |= CV_CALIB_CB_ADAPTIVE_THRESH;
+			}
 			bool found = findChessboardSquares(
 					frame,
 					chessboardSize,
-					chessPoints);
+					chessPoints,
+					flags);
 
-			std::cout << found << std::endl;
 			drawChessboardCorners(frame, chessboardSize, chessPoints, found);
 		}
 
@@ -43,6 +48,9 @@ int main()
 
 		if (pressedKey == ' ') {
 			searching = !searching;
+		}
+		else if (pressedKey == 'a') {
+			adaptiveThreshold = !adaptiveThreshold;
 		}
 	}
 
