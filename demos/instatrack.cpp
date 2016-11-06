@@ -456,26 +456,24 @@ void convert32fTo32s(Mat &src, Mat &dst)
 	}
 }
 
+/*
 void segmentWhite(const Mat &whiteMask, const Mat &blackMask, Mat &outLabels)
 {
-	Mat dist;
 	Mat markers;
 
-	cv::distanceTransform(whiteMask, dist, cv::DIST_L1, cv::DIST_MASK_3);
-
-	{
+	if (false) {
+		Mat dist;
+		cv::distanceTransform(whiteMask, dist, cv::DIST_L1, cv::DIST_MASK_3);
 		Mat distS32;
-
 		convert32fTo32s(dist, distS32);
-
 		localMaxima(distS32, markers, Size{7, 7});
+		cv::bitwise_not(markers, markers);
 	}
+}
+*/
 
-	//cv::threshold(dist, markers, 3, 255, CV_THRESH_BINARY_INV);
-	cv::bitwise_not(markers, markers);
-
-	markers.convertTo(markers, CV_8U);
-
+void segmentWhite(const Mat &markers, Mat &outLabels)
+{
 	Mat segmentDist;
 
 	cv::distanceTransform(
@@ -485,10 +483,6 @@ void segmentWhite(const Mat &whiteMask, const Mat &blackMask, Mat &outLabels)
 			cv::DIST_L1,
 			cv::DIST_MASK_3,
 			cv::DIST_LABEL_CCOMP);
-
-	printTime("distanceTransform2");
-
-	outLabels.setTo(0, blackMask);
 }
 
 void doSegmentationNew(const Mat &binary, SegmentationResult &seg)
@@ -498,11 +492,23 @@ void doSegmentationNew(const Mat &binary, SegmentationResult &seg)
 
 	cv::bitwise_not(whiteMask, blackMask);
 
+	Mat ternary;
+
+	Mat whiteMarkers;
+	Mat blackMarkers;
+
+	ternerizeGrow(binary, ternary, blackMarkers, whiteMarkers);
+
+	cv::bitwise_not(whiteMarkers, whiteMarkers);
+	cv::bitwise_not(blackMarkers, blackMarkers);
+
 	Mat blackLabels = seg.labels;
 	Mat whiteLabels;
 
-	segmentWhite(whiteMask, blackMask, whiteLabels);
-	segmentWhite(blackMask, whiteMask, blackLabels);
+	segmentWhite(whiteMarkers, whiteLabels);
+	whiteLabels.setTo(0, blackMask);
+	segmentWhite(blackMarkers, blackLabels);
+	blackLabels.setTo(0, whiteMask);
 
 	double max;
 
