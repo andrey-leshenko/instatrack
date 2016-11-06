@@ -135,68 +135,6 @@ void markAsNeighbor(Blob &a, int bIndex)
 	a.invalid = true;
 }
 
-bool closeCircle(const vector<Blob> &blobs, int a, int b, int &ax, int &bx, int notAx = -1)
-{
-	const Blob &blobA = blobs[a];
-	const Blob &blobB = blobs[b];
-
-	for (int i = 0; i < 4; i++) {
-		int maybeAx = blobA.neighbors[i];
-
-		if (maybeAx == 0) {
-			break;
-		}
-		if (maybeAx == b || maybeAx == notAx) {
-			continue;
-		}
-
-		const Blob &blobMaybeAx = blobs[maybeAx];
-
-		if (blobMaybeAx.invalid) {
-			continue;
-		}
-
-		for (int j = 0; j < 4; j++) {
-			int maybeBx = blobMaybeAx.neighbors[j];
-
-			if (maybeBx == 0) {
-				break;
-			}
-			if (blobs[maybeBx].invalid) {
-				continue;
-			}
-
-			for (int k = 0; k < 4; k++) {
-				if (blobB.neighbors[k] == 0) {
-					break;
-				}
-				if (maybeBx == blobB.neighbors[k] &&
-					maybeBx != a) {
-					ax = maybeAx;
-					bx = maybeBx;
-					return true;
-				}
-			}
-		}
-	}
-
-	return false;
-}
-
-bool areClockwiseOnImage(Vec2d a, Vec2d b, Vec2d c, Vec2d d)
-{
-	Vec2d ac = c - a;
-	Vec2d bd = d - b;
-
-	Vec2d acNormal{ac(1), -ac(0)};
-	double dot = acNormal.dot(bd);
-
-	bool clockwise = dot >= 0;
-	bool clockwiseWhenYIsDown = !clockwise;
-
-	return clockwiseWhenYIsDown;
-}
-
 // XXX
 void show(InputArray _m)
 {
@@ -241,11 +179,6 @@ void findLeaksHorizontal(Mat &ternary, Mat &outLeakMask, int maxDistance)
 	}
 }
 
-void findLeaksDiagonal(Mat &ternary, Mat &outLeakMask, int maxDistance)
-{
-	// This should help when the chessboard is nice and parallel
-}
-
 void findLeaks(Mat &ternary, Mat &outLeakMask, int maxDistance)
 {
 	CV_Assert(ternary.type() == CV_8U);
@@ -253,6 +186,7 @@ void findLeaks(Mat &ternary, Mat &outLeakMask, int maxDistance)
 	outLeakMask.create(ternary.rows, ternary.cols, ternary.type());
 	cv::bitwise_and(outLeakMask, 0, outLeakMask);
 
+	// XXX there is already a function named this way
 	auto findLeaksHorizontal = [](Mat &ternary, Mat &outLeakMask, int maxDistance)
 	{
 		for (int r = 0; r < ternary.rows; r++) {
@@ -387,11 +321,11 @@ struct SegmentationResult
 void drawCComps(const Mat &labels, Mat &dst)
 {
 	CV_Assert(labels.type() == CV_32S);
-	vector<cv::Vec3b> palette(32);
+	vector<cv::Vec3b> palette(64);
 
 	cv::RNG rng(7091998);
 
-	for (int i = 0; i < palette.size(); i++) {
+	for (int i = 0; i < (int)palette.size(); i++) {
 		palette[i] = {(u8)rng.uniform(0, 180), (u8)rng.uniform(100, 200), (u8)rng.uniform(50, 255)};
 	}
 
@@ -440,13 +374,105 @@ void doSegmentationTernary(const Mat &binary, SegmentationResult &seg)
 	seg.colors = ternary;
 }
 
-int segmentWhite(const Mat &whiteMask, const Mat &blackMask, Mat &outLabels)
+s32 arrayMaxS32(const s32 *begin, const s32 *end)
+{
+	s32 maxSoFar = *begin;
+
+	begin++;
+
+	while (begin < end) {
+		maxSoFar = std::max(maxSoFar, *begin);
+		begin++;
+	}
+
+	return maxSoFar;
+}
+
+void arrayWindowMaxS32(const s32 *srcBegin, const s32 *srcEnd, s32 *dstBegin, int windowSize)
+{
+	int count = srcEnd - srcBegin;
+
+	int windowExtentLeft = windowSize / 2;
+	int windowExtentRight = windowSize + 1 / 2;
+
+	for (int i = 0; i < count; i++) {
+		const s32 *searchBegin = srcBegin + i - windowExtentLeft;
+		const s32 *searchEnd = srcBegin + i + windowExtentRight;
+
+		searchBegin = std::max(searchBegin, srcBegin);
+		searchEnd = std::min(searchEnd, srcEnd - 1);
+
+		dstBegin[i] = arrayMaxS32(searchBegin, searchEnd);
+	}
+}
+
+void localMaximaHorizontal(Mat &src, Mat &dst, int windowSize)
+{
+	CV_Assert(src.type() == CV_32S);
+	dst.create(src.size(), src.type());
+
+	for (int r = 0; r < src.rows; r++) {
+		s32 *srcRowBegin = src.ptr<s32>(r);
+		s32 *srcRowEnd = srcRowBegin + src.cols;
+
+		s32 *dstRowBegin = dst.ptr<s32>(r);
+
+		arrayWindowMaxS32(srcRowBegin, srcRowEnd, dstRowBegin, windowSize);
+	}
+}
+
+void localMaxima(Mat &src, Mat &dst, Size windowSize)
+{
+	CV_Assert(src.type() == CV_32S);
+	dst.create(src.size(), dst.type());
+
+	Mat vertical{src.size(), src.type()};
+	Mat srcT = src.t();
+
+	localMaximaHorizontal(srcT, vertical, windowSize.height);
+	vertical = vertical.t();
+	localMaximaHorizontal(vertical, dst, windowSize.width);
+
+	dst -= src;
+	dst.convertTo(dst, CV_8U);
+	cv::threshold(dst, dst, 0, 255, CV_THRESH_BINARY_INV);
+}
+
+void convert32fTo32s(Mat &src, Mat &dst)
+{
+	CV_Assert(src.type() == CV_32F);
+	dst.create(src.size(), CV_32S);
+
+	auto srcIt = src.begin<float>();
+	auto srcEnd = src.end<float>();
+
+	auto dstIt = dst.begin<s32>();
+
+	while (srcIt != srcEnd) {
+		*dstIt = static_cast<s32>(*srcIt);
+
+		srcIt++;
+		dstIt++;
+	}
+}
+
+void segmentWhite(const Mat &whiteMask, const Mat &blackMask, Mat &outLabels)
 {
 	Mat dist;
 	Mat markers;
 
 	cv::distanceTransform(whiteMask, dist, cv::DIST_L1, cv::DIST_MASK_3);
-	cv::threshold(dist, markers, 3, 255, CV_THRESH_BINARY_INV);
+
+	{
+		Mat distS32;
+
+		convert32fTo32s(dist, distS32);
+
+		localMaxima(distS32, markers, Size{7, 7});
+	}
+
+	//cv::threshold(dist, markers, 3, 255, CV_THRESH_BINARY_INV);
+	cv::bitwise_not(markers, markers);
 
 	markers.convertTo(markers, CV_8U);
 
@@ -459,6 +485,8 @@ int segmentWhite(const Mat &whiteMask, const Mat &blackMask, Mat &outLabels)
 			cv::DIST_L1,
 			cv::DIST_MASK_3,
 			cv::DIST_LABEL_CCOMP);
+
+	printTime("distanceTransform2");
 
 	outLabels.setTo(0, blackMask);
 }
@@ -605,17 +633,75 @@ void drawNeighborGraph(Mat &dst, const SegmentationResult &seg, const vector<Blo
 	}
 }
 
+bool closeCircle(const vector<Blob> &blobs, int a, int b, int &ax, int &bx, int notAx = -1)
+{
+	const Blob &blobA = blobs[a];
+	const Blob &blobB = blobs[b];
+
+	for (int i = 0; i < 4; i++) {
+		int maybeAx = blobA.neighbors[i];
+
+		if (maybeAx == 0) {
+			break;
+		}
+		if (maybeAx == b || maybeAx == notAx) {
+			continue;
+		}
+
+		const Blob &blobMaybeAx = blobs[maybeAx];
+
+		if (blobMaybeAx.invalid) {
+			continue;
+		}
+
+		for (int j = 0; j < 4; j++) {
+			int maybeBx = blobMaybeAx.neighbors[j];
+
+			if (maybeBx == 0) {
+				break;
+			}
+			if (blobs[maybeBx].invalid) {
+				continue;
+			}
+
+			for (int k = 0; k < 4; k++) {
+				if (blobB.neighbors[k] == 0) {
+					break;
+				}
+				if (maybeBx == blobB.neighbors[k] &&
+					maybeBx != a) {
+					ax = maybeAx;
+					bx = maybeBx;
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+bool areClockwiseOnImage(Vec2d a, Vec2d b, Vec2d c, Vec2d d)
+{
+	Vec2d ac = c - a;
+	Vec2d bd = d - b;
+
+	Vec2d acNormal{ac(1), -ac(0)};
+	double dot = acNormal.dot(bd);
+
+	bool clockwise = dot >= 0;
+	bool clockwiseWhenYIsDown = !clockwise;
+
+	return clockwiseWhenYIsDown;
+}
+
 bool findChessboardInGraph(SegmentationResult &seg, vector<Blob> &blobs, vector<Point2f> &centers, Size chessSize, vector<Point2f> &chessPoints)
 {
-	Mat chess;
+	CV_Assert(chessSize.height > 1 && chessSize.width > 1);
 
 	int chessSizeMax = std::max(chessSize.width, chessSize.height);
-	chess.create(chessSizeMax, chessSizeMax, CV_32S);
-	
-	// NOTE(Andrey): So cv::drawChessboardCorners won't draw last frame's points
-	chessPoints.resize(0);
 
-	CV_Assert(chessSize.height > 1 && chessSize.width > 1);
+	Mat chess{chessSizeMax, chessSizeMax, CV_32S};
 
 	for (int i = 1; i < seg.blackN; i++) {
 		Blob &b = blobs[i];
@@ -655,11 +741,6 @@ bool findChessboardInGraph(SegmentationResult &seg, vector<Blob> &blobs, vector<
 		}
 
 		{
-			int i1 = chess.at<s32>(0, 0);
-			int i2 = chess.at<s32>(0, 1);
-			int i3 = chess.at<s32>(1, 1);
-			int i4 = chess.at<s32>(1, 0);
-
 			using cv::Vec2f;
 
 			Vec2f p1 = (Vec2f)centers[chess.at<s32>(0, 0)];
@@ -728,9 +809,9 @@ bool findChessboardInGraph(SegmentationResult &seg, vector<Blob> &blobs, vector<
 		return true;
 	}
 
+	chessPoints.resize(0);
 	return false;
 }
-
 
 int main(int argc, char* argv[])
 {
@@ -786,7 +867,7 @@ int main(int argc, char* argv[])
 	int pressedKey = 0;
 
 	while (pressedKey != 'q') {
-		printTime("Start");
+		printTime("=====>Start");
 
 		//
 		// Capture a frame
@@ -915,7 +996,7 @@ int main(int argc, char* argv[])
 			failTrigger = false;
 		}
 
-		printTime("Show and finish\n=====================");
+		printTime("Show and finish");
 	}
 
 	return 0;

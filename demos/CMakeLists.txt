@@ -28,3 +28,7 @@ target_link_libraries(my_chessboard ${OpenCV_LIBS})
 
 add_executable(instatrack instatrack.cpp)
 target_link_libraries(instatrack ${OpenCV_LIBS})
+
+if ( CMAKE_COMPILER_IS_GNUCC )
+	set_property( TARGET instatrack APPEND_STRING PROPERTY COMPILE_FLAGS -Wall )
+endif ( CMAKE_COMPILER_IS_GNUCC )
