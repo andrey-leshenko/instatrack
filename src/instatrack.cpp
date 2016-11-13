@@ -495,7 +495,20 @@ static void doSegmentationNew(const Mat &binary, SegmentationResult &seg)
 	Mat whiteMarkers;
 	Mat blackMarkers;
 
-	ternerizeGrow(binary, ternary, blackMarkers, whiteMarkers);
+	{
+		whiteMarkers = whiteMask.clone();
+		blackMarkers = blackMask.clone();
+
+		cv::dilate(whiteMarkers, whiteMarkers, Mat{}, Point{-1, -1}, 2);
+		cv::dilate(blackMarkers, blackMarkers, Mat{}, Point{-1, -1}, 3);
+
+		Mat notInBoth;
+		cv::bitwise_xor(whiteMarkers, blackMarkers, notInBoth);
+		cv::bitwise_and(whiteMarkers, notInBoth, whiteMarkers);
+		cv::bitwise_and(blackMarkers, notInBoth, blackMarkers);
+
+		createTernary(blackMarkers, whiteMarkers, ternary);
+	}
 
 	cv::bitwise_not(whiteMarkers, whiteMarkers);
 	cv::bitwise_not(blackMarkers, blackMarkers);
