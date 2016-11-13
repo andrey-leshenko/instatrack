@@ -1,12 +1,19 @@
-#include "../src/base.hpp"
-#include "../src/util.hpp"
+#include "base.hpp"
+#include "util.hpp"
 
-int main()
+int main(int argc, char *argv[])
 {
-	VideoCapture cam{1};
+	int cameraIndex = 0;
+
+	if (argc - 1 > 0) {
+		cameraIndex = atoi(argv[1]);
+	}
+
+	VideoCapture cam{cameraIndex};
 
 	if (!cam.isOpened()) {
 		std::cerr << "Error: Couldn't capture camera." << std::endl;
+		return -1;
 	}
 
 	cam.set(cv::CAP_PROP_FPS, 60);

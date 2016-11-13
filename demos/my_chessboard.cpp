@@ -1,12 +1,18 @@
-#include "../src/base.hpp"
-#include "../src/util.hpp"
-#include "../src/chessboard.hpp"
+#include "base.hpp"
+#include "util.hpp"
+#include "../src/instatrack.hpp"
 
-const Size chessboardSize{5, 4};
 
-int main()
+int main(int argc, char *argv[])
 {
-	VideoCapture cam{1};
+	int cameraIndex = 0;
+	Size chessboardSize{5, 4};
+
+	if (argc - 1 > 0) {
+		cameraIndex = atoi(argv[1]);
+	}
+
+	VideoCapture cam{cameraIndex};
 
 	if (!cam.isOpened()) {
 		std::cerr << "Error: Couldn't capture camera." << std::endl;
@@ -33,7 +39,7 @@ int main()
 			if (adaptiveThreshold) {
 				flags |= CV_CALIB_CB_ADAPTIVE_THRESH;
 			}
-			bool found = findChessboardSquares(
+			bool found = instatrackFindChessboard(
 					frame,
 					chessboardSize,
 					chessPoints,

@@ -1,12 +1,16 @@
 #include <cmath>
 
-#include "../src/base.hpp"
-#include "../src/util.hpp"
-#include "../src/threshold.hpp"
+#include "base.hpp"
+#include "util.hpp"
+#include "../src/instatrack.hpp"
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-	int cameraIndex = 1;
+	int cameraIndex = 0;
+
+	if (argc - 1 > 0) {
+		cameraIndex = atoi(argv[1]);
+	}
 
 	VideoCapture cap{cameraIndex};
 
@@ -182,7 +186,7 @@ int main(int argc, char* argv[])
 				}
 			}
 
-			if (mode == 7) {
+			if (mode >= 7) {
 				cv::imshow("w", binary);
 			}
 		}
