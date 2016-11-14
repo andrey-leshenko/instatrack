@@ -26,6 +26,9 @@ target_link_libraries(naive_circles ${OpenCV_LIBS})
 add_executable(my_chessboard my_chessboard.cpp util.cpp ../src/instatrack.cpp)
 target_link_libraries(my_chessboard ${OpenCV_LIBS})
 
+add_executable(multi_camera multi_camera.cpp util.cpp)
+target_link_libraries(multi_camera ${OpenCV_LIBS})
+
 add_executable(instatrack instatrack.cpp ../src/instatrack.cpp)
 target_link_libraries(instatrack ${OpenCV_LIBS})
 
